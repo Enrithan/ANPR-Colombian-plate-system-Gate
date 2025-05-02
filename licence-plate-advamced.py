@@ -1,44 +1,56 @@
-import cv2 
-from matplotlib import pyplot as plt
-import numpy as np
+import re
 import easyocr
-
-import random
-
+import cv2
+import matplotlib.pyplot as plt
 
 # Cargar imagen
 image_path = 'Placas/1.jpg'
 image = cv2.imread(image_path)
-
-if image is None:
-    print("❌ No se pudo cargar la imagen. Verifica la ruta.")
-    exit()
-
-# Convertir de BGR a RGB
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-# Crear el lector de EasyOCR
-reader = easyocr.Reader(['es'])  # Puedes usar ['en', 'es'] si quieres español también
+# Crear lector OCR
+reader = easyocr.Reader(['en'])
 
-# Ejecutar OCR
+# Detectar texto
 results = reader.readtext(image_rgb)
 
-# Mostrar resultados
+# Lista para guardar posibles placas
+detected_plates = []
+
+# Iterar y filtrar
 for (bbox, text, prob) in results:
-    print(f"📍 Texto detectado: {text} (Confianza: {prob:.2f})")
+    # Convertir a mayúsculas y eliminar espacios
+    cleaned_text = text.upper().replace(" ", "")
+    
+    
+     
+    
+    
+    # Regex simple para placa tipo "ABC123" o "ABC-123"
+    if re.match(r'^[A-Z]{3}[-]?[0-9]{3}$', cleaned_text):
+        label = "✅ PLAUSIBLE"
+    else:
+        label = "❌ NO FORMATO"
+        detected_plates.append((cleaned_text, prob))
+        print(f"{label} → {cleaned_text} (Confianza: {prob:.2f})")
+        # Dibujar en imagen
+        (tl, tr, br, bl) = bbox
+        tl = tuple(map(int, tl))
+        br = tuple(map(int, br))
+        cv2.rectangle(image, tl, br, (0, 255, 0), 2)
+        cv2.putText(image, cleaned_text, (tl[0], tl[1] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
-    # Dibujar la caja en la imagen
-    (top_left, top_right, bottom_right, bottom_left) = bbox
-    top_left = tuple(map(int, top_left))
-    bottom_right = tuple(map(int, bottom_right))
+# Mostrar resultados
+if detected_plates:
+    for plate, confidence in detected_plates:
+        print(f"✅ Posible placa: {plate} (Confianza: {confidence:.2f})")
+else:
+    print("❌ No se detectaron placas con confianza suficiente.")
 
-    cv2.rectangle(image, top_left, bottom_right, (0, 255, 0), 2)
-    cv2.putText(image, text, (top_left[0], top_left[1] - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-
-# Mostrar imagen con texto detectado
+# Mostrar imagen procesada
 plt.figure(figsize=(10, 6))
 plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-plt.title("📸 Resultado con EasyOCR")
+plt.title("📸 Resultado Filtrado de Placa")
 plt.axis("off")
 plt.show()
