@@ -1,6 +1,12 @@
 import cv2
 import sys
 import os
+import time
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Ensure the root util is found for get_car
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -13,6 +19,9 @@ from services.interfaces import IAuthorizationService, IGateController
 
 
 class GateEntrySystem:
+    AUTH_CACHE_TTL = 30  # seconds
+    MAX_CACHE_SIZE = 1000
+
     def __init__(
         self,
         config: AppConfig,
@@ -32,6 +41,28 @@ class GateEntrySystem:
         self.plate_reader = plate_reader
         self.auth_service = auth_service
         self.gate_controller = gate_controller
+        self._auth_cache = {} # Cache for authorization results: {plate_text: (is_authorized, timestamp)}
+
+    def _get_authorized_status(self, plate_text: str) -> bool:
+        """Checks cache before querying the database for authorization status."""
+        now = time.monotonic()
+
+        # 1. Check Cache
+        if plate_text in self._auth_cache:
+            is_authorized, timestamp = self._auth_cache[plate_text]
+            if now - timestamp < self.AUTH_CACHE_TTL:
+                logger.debug(f"Cache hit for plate {plate_text}")
+                return is_authorized
+
+        # 2. Database Query
+        is_authorized = self.auth_service.is_authorized(plate_text)
+
+        # 3. Update Cache (with simple size limit)
+        if len(self._auth_cache) >= self.MAX_CACHE_SIZE:
+            self._auth_cache.clear() # Simple eviction strategy
+
+        self._auth_cache[plate_text] = (is_authorized, now)
+        return is_authorized
 
     def start(self):
         print("Gate Entry System Started.")
@@ -104,7 +135,9 @@ class GateEntrySystem:
     def _process_recognized_plate(self, plate_text: str, frame):
         print(f"Read Plate: {plate_text}")
         
-        if self.auth_service.is_authorized(plate_text):
+        is_authorized = self._get_authorized_status(plate_text)
+
+        if is_authorized:
             print(f"Plate {plate_text} AUTHORIZED.")
             # Action!
             self.gate_controller.open_gate()
