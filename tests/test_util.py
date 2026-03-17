@@ -14,9 +14,44 @@ with patch.dict(sys.modules, {
 }):
     from util import license_complies_format
 
-def test_license_complies_format_valid():
+def test_license_complies_format_valid_car():
     assert license_complies_format("ABC123") is True
     assert license_complies_format("XYZ789") is True
+
+def test_license_complies_format_valid_motorcycle():
+    assert license_complies_format("ABC12A") is True
+    assert license_complies_format("XYZ78Z") is True
+
+def test_license_complies_format_ocr_mappings_letters():
+    # 0 maps to O, 1 maps to I, 3 maps to J, 4 maps to A, 5 maps to S, 6 maps to G
+    assert license_complies_format("0BC123") is True # 0 -> O
+    assert license_complies_format("A1C123") is True # 1 -> I
+    assert license_complies_format("AB3123") is True # 3 -> J
+    assert license_complies_format("4BC123") is True # 4 -> A
+    assert license_complies_format("5BC123") is True # 5 -> S
+    assert license_complies_format("6BC123") is True # 6 -> G
+    assert license_complies_format("013123") is True # 013 -> OIJ
+
+def test_license_complies_format_ocr_mappings_numbers():
+    # O maps to 0, I maps to 1, J maps to 3, A maps to 4, S maps to 5, G maps to 6
+    assert license_complies_format("ABCO23") is True # O -> 0
+    assert license_complies_format("ABCI23") is True # I -> 1
+    assert license_complies_format("ABC1J3") is True # J -> 3
+    assert license_complies_format("ABC12A") is True # A is valid as motorcycle last char, or A->4
+    assert license_complies_format("ABC12S") is True # S is valid as motorcycle last char, or S->5
+    assert license_complies_format("ABC12G") is True # G is valid as motorcycle last char, or G->6
+    assert license_complies_format("ABCOIJ") is True # OIJ -> 013 (Valid Car)
+
+def test_license_complies_format_strict_positions():
+    # Unmapped digit in letter position
+    assert license_complies_format("2BC123") is False
+    assert license_complies_format("A7C123") is False
+    assert license_complies_format("AB8123") is False
+    assert license_complies_format("999123") is False
+    # Unmapped letter in middle number position
+    assert license_complies_format("ABCX23") is False
+    assert license_complies_format("ABC1Y3") is False
+    assert license_complies_format("ABCXY3") is False
 
 def test_license_complies_format_invalid_length():
     assert license_complies_format("ABC12") is False
@@ -25,8 +60,8 @@ def test_license_complies_format_invalid_length():
 
 def test_license_complies_format_invalid_characters():
     assert license_complies_format("abc123") is False  # Lowercase
-    assert license_complies_format("AB1234") is False  # Digit in letter position
-    assert license_complies_format("ABC12A") is False  # Letter in digit position
+    assert license_complies_format("AB2234") is False  # Unmapped digit in letter position
+    assert license_complies_format("ABC1X3") is False  # Unmapped letter in middle digit position
     assert license_complies_format("A!C123") is False  # Special character
     assert license_complies_format("ABC 12") is False  # Space
 

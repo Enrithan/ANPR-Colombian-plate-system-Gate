@@ -12,6 +12,14 @@ class EasyOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _reader
 
+    def license_complies_format(self, text):
+        """
+        Check if the license plate text complies with the required format.
+        Colombian format Cars/Commercial: AAA123 (3 letters, 3 numbers)
+        Colombian format Motorcycles: AAA12A (3 letters, 2 numbers, 1 letter)
+        """
+        return license_complies_format(text)
+
     def read_text(self, cropped_plate: np.ndarray) -> tuple[str, float]:
         # Preprocessing
         gray = cv2.cvtColor(cropped_plate, cv2.COLOR_BGR2GRAY)
@@ -25,7 +33,7 @@ class EasyOCRPlateReader(IPlateReader):
             text = text.upper().replace(' ', '')
             
             # Simple format check
-            if license_complies_format(text):
+            if self.license_complies_format(text):
                 return format_license(text), score
 
         return "", 0.0
