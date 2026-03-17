@@ -1,0 +1,18 @@
+{
+    "camera": {
+        "source": "./cali_traffic.mp4",
+        "is_live": false
+    },
+    "models": {
+        "vehicle_detector": "yolov8n.pt",
+        "plate_detector": "./runs/detect/colombian_plates3/weights/best.pt"
+    },
+    "gate": {
+        "type": "mock",
+        "trigger_url": "http://192.168.1.100/relay/open",
+        "cooldown_seconds": 10
+    },
+    "auth": {
+        "database_path": "authorized_plates.db"
+    }
+}

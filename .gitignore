@@ -1,0 +1,44 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Large video files
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# Dataset images and labels (too large for git — use Roboflow or DVC)
+dataset/train/images/
+dataset/train/labels/
+dataset/valid/images/
+dataset/valid/labels/
+
+# YOLO training runs — only track config, not weights/images
+runs/detect/*/weights/last.pt
+runs/detect/*/weights/best.pt
+runs/
+
+# Pre-trained model weights
+models/*.pt
+
+# Security scan outputs
+security_report.json
+
+# Database (contains resident plate data - never commit)
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+*.swp
