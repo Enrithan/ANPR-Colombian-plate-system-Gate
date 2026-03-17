@@ -1,5 +1,8 @@
 # Python
 venv/
+
+# YOLO model weights — all .pt files regardless of location (can be large)
+*.pt
 __pycache__/
 *.pyc
 *.pyo
