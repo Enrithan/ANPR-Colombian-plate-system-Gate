@@ -69,7 +69,7 @@ def write_csv(results: dict, output_path: str):
                     'plate_conf':lp['bbox_score'],
                     'plate_text':text,
                     'text_conf': lp['text_score'],
-                    'complies_colombia': is_colombian_plate(text)
+                    'complies_colombia': license_complies_format(text)
                 }
                 writer.writerow(row)
 
