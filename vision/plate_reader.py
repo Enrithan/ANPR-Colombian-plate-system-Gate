@@ -11,14 +11,16 @@ _reader = easyocr.Reader(['en'], gpu=False)
 class EasyOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _reader
+        # Pre-compute allowlist for performance
+        self.allowlist = string.ascii_uppercase + string.digits
 
     def read_text(self, cropped_plate: np.ndarray) -> tuple[str, float]:
         # Preprocessing
         gray = cv2.cvtColor(cropped_plate, cv2.COLOR_BGR2GRAY)
         _, thresh = cv2.threshold(gray, 64, 255, cv2.THRESH_BINARY_INV)
 
-        # EasyOCR prediction
-        detections = self.reader.readtext(thresh)
+        # EasyOCR prediction with allowlist to speed up inference and constrain outputs
+        detections = self.reader.readtext(thresh, allowlist=self.allowlist)
 
         for detection in detections:
             bbox, text, score = detection
