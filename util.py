@@ -170,7 +170,7 @@ def read_license_plate(license_plate_crop):
         tuple: Tuple containing the formatted license plate text and its confidence score.
     """
 
-    detections = reader.readtext(license_plate_crop)
+    detections = reader.readtext(license_plate_crop, allowlist=string.ascii_uppercase + string.digits)
 
     for detection in detections:
         bbox, text, score = detection
