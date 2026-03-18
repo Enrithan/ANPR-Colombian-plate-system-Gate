@@ -28,7 +28,7 @@ class AppConfig:
             },
             "gate": {
                 "type": "mock",
-                "trigger_url": "http://192.168.1.100/relay/open",
+                "trigger_url": "http://localhost/relay/open",
                 "cooldown_seconds": 10
             },
             "auth": {
@@ -50,7 +50,7 @@ class AppConfig:
 
     @property
     def camera_source(self) -> str:
-        return self._config["camera"]["source"]
+        return os.getenv("ANPR_CAMERA_SOURCE", self._config["camera"]["source"])
         
     @property
     def is_live_camera(self) -> bool:
@@ -70,7 +70,7 @@ class AppConfig:
         
     @property
     def gate_trigger_url(self) -> str:
-        return self._config["gate"].get("trigger_url", "")
+        return os.getenv("ANPR_GATE_TRIGGER_URL", self._config["gate"].get("trigger_url", ""))
         
     @property
     def gate_cooldown(self) -> int:
@@ -78,4 +78,4 @@ class AppConfig:
 
     @property
     def db_path(self) -> str:
-        return self._config["auth"].get("database_path", "authorized_plates.db")
+        return os.getenv("ANPR_DB_PATH", self._config["auth"].get("database_path", "authorized_plates.db"))
