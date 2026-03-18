@@ -1,4 +1,5 @@
 import re
+import string
 import easyocr
 import cv2
 import matplotlib.pyplot as plt
@@ -11,8 +12,8 @@ image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 # Crear lector OCR
 reader = easyocr.Reader(['en'])
 
-# Detectar texto
-results = reader.readtext(image_rgb)
+# Detectar texto, string allowlist para performance
+results = reader.readtext(image_rgb, allowlist=string.ascii_uppercase + string.digits)
 
 # Lista para guardar posibles placas
 detected_plates = []

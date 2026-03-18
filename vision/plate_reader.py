@@ -11,6 +11,8 @@ _reader = easyocr.Reader(['en'], gpu=False)
 class EasyOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _reader
+        # Pre-compute allowlist for performance
+        self.allowlist = string.ascii_uppercase + string.digits
 
     def correct_perspective(self, img):
         """Finds the 4 corners of the plate and warps it to a clean rectangle."""
@@ -78,8 +80,8 @@ class EasyOCRPlateReader(IPlateReader):
         # Apply a light adaptive threshold to improve OCR contrast
         thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
-        # EasyOCR prediction
-        detections = self.reader.readtext(thresh)
+        # EasyOCR prediction with allowlist to speed up inference and constrain outputs
+        detections = self.reader.readtext(thresh, allowlist=self.allowlist)
 
         for detection in detections:
             bbox, text, score = detection
