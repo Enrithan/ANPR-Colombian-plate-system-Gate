@@ -71,6 +71,14 @@ class EasyOCRPlateReader(IPlateReader):
         
         return warped
 
+    def license_complies_format(self, text):
+        """
+        Check if the license plate text complies with the required format.
+        Colombian format Cars/Commercial: AAA123 (3 letters, 3 numbers)
+        Colombian format Motorcycles: AAA12A (3 letters, 2 numbers, 1 letter)
+        """
+        return license_complies_format(text)
+
     def read_text(self, cropped_plate: np.ndarray) -> tuple[str, float]:
         # NEW: Phase 5 - Perspective Correction (Unwarping)
         processed_plate = self.correct_perspective(cropped_plate)
