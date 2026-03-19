@@ -35,7 +35,7 @@ class EasyOCRPlateReader(IPlateReader):
                 break
         
         if screen_cnt is None:
-            return img # Return original if no 4-point polygon found
+            return gray # Return grayscale original if no 4-point polygon found
 
         # 3. Order the points: [top-left, top-right, bottom-right, bottom-left]
         pts = screen_cnt.reshape(4, 2)
@@ -50,15 +50,7 @@ class EasyOCRPlateReader(IPlateReader):
         rect[3] = pts[np.argmax(diff)]
 
         # 4. Perspective warp to a standard size (e.g. 320x160)
-        (tl, tr, br, bl) = rect
-        widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-        widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-        maxWidth = max(int(widthA), int(widthB))
-
-        heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-        heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-        maxHeight = max(int(heightA), int(heightB))
-        
+        # We can optimize out the width/height checks since dst is static
         # Standard Colombian plate aspect ratio
         dst = np.array([
             [0, 0],
@@ -67,9 +59,12 @@ class EasyOCRPlateReader(IPlateReader):
             [0, 160 - 1]], dtype="float32")
 
         M = cv2.getPerspectiveTransform(rect, dst)
-        warped = cv2.warpPerspective(img, M, (320, 160))
         
-        return warped
+        # Optimize: Warp the single-channel grayscale image instead of the 3-channel BGR image
+        # This speeds up the affine transformation and saves memory bandwidth
+        warped_gray = cv2.warpPerspective(gray, M, (320, 160))
+
+        return warped_gray
 
     def license_complies_format(self, text):
         """
@@ -81,12 +76,12 @@ class EasyOCRPlateReader(IPlateReader):
 
     def read_text(self, cropped_plate: np.ndarray) -> tuple[str, float]:
         # NEW: Phase 5 - Perspective Correction (Unwarping)
-        processed_plate = self.correct_perspective(cropped_plate)
+        processed_plate_gray = self.correct_perspective(cropped_plate)
         
         # Preprocessing for OCR
-        gray = cv2.cvtColor(processed_plate, cv2.COLOR_BGR2GRAY)
+        # Optimize: Removed redundant cv2.cvtColor since correct_perspective now returns grayscale
         # Apply a light adaptive threshold to improve OCR contrast
-        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        thresh = cv2.adaptiveThreshold(processed_plate_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
         # EasyOCR prediction with allowlist to speed up inference and constrain outputs
         detections = self.reader.readtext(thresh, allowlist=self.allowlist)
