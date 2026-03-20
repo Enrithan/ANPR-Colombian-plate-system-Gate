@@ -18,11 +18,12 @@ build/
 *.mkv
 *.mov
 
-# Dataset images and labels (too large for git — use Roboflow or DVC)
-dataset/train/images/
-dataset/train/labels/
-dataset/valid/images/
-dataset/valid/labels/
+# Dataset images and labels (too large for git)
+dataset/
+curated_dataset/
+
+# Deep Learning weights
+*.pth
 
 # YOLO training runs — only track config, not weights/images
 runs/detect/*/weights/last.pt

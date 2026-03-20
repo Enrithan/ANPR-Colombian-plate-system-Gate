@@ -1,15 +1,33 @@
 import sys
 import os
+os.environ["FLAGS_enable_pir_api"] = "0"
+
+# IMPORTANT: Import PaddleOCR BEFORE YOLO/PyTorch to prevent Intel MKL thread conflicts
+# The following line is commented out as PaddleOCR is no longer used.
+# from vision.paddle_reader import PaddleOCRPlateReader
 
 from config.app_config import AppConfig
 from core.gate_system import GateEntrySystem
 
 from vision.video_source import MockVideoSource, RTSPVideoSource
 from vision.detectors import YOLOVehicleDetector, SORTVehicleTracker, YOLOPlateDetector
-from vision.plate_reader import EasyOCRPlateReader
+from vision.lprnet_reader import LPRNetPlateReader  # Custom PyTorch LPRNet
 
 from services.auth_service import SQLiteAuthService
 from services.gate_controller import MockGateController, HTTPRelayGateController
+
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import time
+
+class ModelWatcher(FileSystemEventHandler):
+    def __init__(self, reader):
+        self.reader = reader
+    def on_modified(self, event):
+        # Trigger reload when the weights file is modified
+        if "best_lprnet.pth" in event.src_path:
+            time.sleep(1) # Wait brief moment for the fast AutoTrainer to finish its file lock
+            self.reader.reload_weights()
 
 def main():
     print("Initializing Gate Entry System Configuration...")
@@ -27,7 +45,13 @@ def main():
     vehicle_detector = YOLOVehicleDetector(config.vehicle_model_path)
     vehicle_tracker = SORTVehicleTracker()
     plate_detector = YOLOPlateDetector(config.plate_model_path)
-    plate_reader = EasyOCRPlateReader()
+    plate_reader = LPRNetPlateReader()
+    
+    # 2.5 Initialize Hot-Reloader Daemon Thread
+    print("Initializing Hot-Reloader Daemon...")
+    observer = Observer()
+    observer.schedule(ModelWatcher(plate_reader), path="LPRNet_Training_Pipeline", recursive=False)
+    observer.start()
     
     # 3. Instantiate External Services
     print("Loading Services...")
