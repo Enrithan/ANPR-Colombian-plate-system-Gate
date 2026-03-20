@@ -1,8 +1,7 @@
 import string
-import easyocr
 import csv
-# Initialize the OCR reader
-reader = easyocr.Reader(['en'], gpu=False)
+# REDUNDANT: Reader moved to vision/plate_reader.py to avoid multiple instances
+# reader = easyocr.Reader(['en'], gpu=False)
 
 # Mapping dictionaries for character conversion
 dict_char_to_int = {'O': '0',
@@ -159,28 +158,7 @@ def format_license(text):
     return license_plate_
 
 
-def read_license_plate(license_plate_crop):
-    """
-    Read the license plate text from the given cropped image.
-
-    Args:
-        license_plate_crop (PIL.Image.Image): Cropped image containing the license plate.
-
-    Returns:
-        tuple: Tuple containing the formatted license plate text and its confidence score.
-    """
-
-    detections = reader.readtext(license_plate_crop, allowlist=string.ascii_uppercase + string.digits)
-
-    for detection in detections:
-        bbox, text, score = detection
-
-        text = text.upper().replace(' ', '')
-
-        if license_complies_format(text):
-            return format_license(text), score
-
-    return None, None
+# UNUSED: read_license_plate removed in favor of vision/plate_reader.py
 
 
 def get_car(license_plate, vehicle_track_ids):
