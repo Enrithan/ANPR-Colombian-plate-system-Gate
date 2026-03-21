@@ -8,23 +8,32 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from sort.sort import Sort
 
+import torch
+
 class YOLOVehicleDetector(IVehicleDetector):
     def __init__(self, model_path: str, vehicle_classes: list = None):
         if vehicle_classes is None:
-            # Default COCO classes for vehicles (car, motorcycle, bus, truck)
             self.vehicle_classes = [2, 3, 5, 7]
         else:
             self.vehicle_classes = vehicle_classes
             
-        self.model = YOLO(model_path).to('cpu')
+        # Auto-detect device (Use CUDA if available)
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # YOLOv10 is compatible with the YOLO class but faster/MIT-licensed
+        self.model = YOLO(model_path).to(self.device)
+        print(f"[AI] Vehicle Detector (Commercial-Ready) loaded on {self.device}")
 
     def detect(self, frame: np.ndarray) -> list:
-        results = self.model(frame, verbose=False)[0]
-        detections = [
-            [x1, y1, x2, y2, conf]
-            for x1, y1, x2, y2, conf, class_id in results.boxes.data.tolist()
-            if int(class_id) in self.vehicle_classes
-        ]
+        # YOLOv10 performs NMS internally (End-to-End)
+        results = self.model(frame, imgsz=640, verbose=False)[0]
+        detections = []
+        if results.boxes:
+            for box in results.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                conf = float(box.conf[0])
+                cls = int(box.cls[0])
+                if cls in self.vehicle_classes:
+                    detections.append([x1, y1, x2, y2, conf])
         return detections
 
 class SORTVehicleTracker(IVehicleTracker):
@@ -40,8 +49,12 @@ class SORTVehicleTracker(IVehicleTracker):
 
 class YOLOPlateDetector(IPlateDetector):
     def __init__(self, model_path: str):
-        self.model = YOLO(model_path).to('cpu')
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model = YOLO(model_path).to(self.device)
+        print(f"[AI] Plate Detector (Commercial-Ready) loaded on {self.device}")
 
     def detect(self, frame: np.ndarray) -> list:
-        # Returns [x1, y1, x2, y2, conf, cls]
-        return self.model(frame, verbose=False)[0].boxes.data.tolist()
+        # Increase imgsz to 1024 for high-speed/small plate accuracy
+        # Note: YOLOv10 is optimized for this type of high-res inference
+        results = self.model(frame, imgsz=1024, verbose=False)[0]
+        return results.boxes.data.tolist() if results.boxes else []

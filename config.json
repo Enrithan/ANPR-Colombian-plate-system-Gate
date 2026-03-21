@@ -5,7 +5,7 @@
     },
     "models": {
         "vehicle_detector": "yolov8n.pt",
-        "plate_detector": "./runs/detect/colombian_plates3/weights/best.pt"
+        "plate_detector": "./runs/detect/colombia_anpr_v10_mit/weights/best.pt"
     },
     "gate": {
         "type": "mock",
