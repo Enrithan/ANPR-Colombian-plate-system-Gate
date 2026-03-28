@@ -18,7 +18,9 @@ dict_int_to_char = {'0': 'O',
                     '6': 'G',
                     '5': 'S'}
 
-
+# ⚡ Bolt: Pre-computed sets for O(1) string validation
+VALID_LETTERS = frozenset(string.ascii_uppercase) | frozenset(dict_int_to_char.keys())
+VALID_NUMBERS = frozenset('0123456789') | frozenset(dict_char_to_int.keys())
 
 
 def write_csv(results: dict, output_path: str):
@@ -88,24 +90,22 @@ def license_complies_format(text):
     if len(text) != 6:
         return False
 
+    # ⚡ Bolt: Use O(1) set lookup for character validation instead of list/dict.keys() search
     # First 3 are ALWAYS letters
     for i in range(3):
-        if not (text[i] in string.ascii_uppercase or text[i] in dict_int_to_char.keys()):
+        if text[i] not in VALID_LETTERS:
             return False
 
     # Next 2 are ALWAYS numbers
     for i in range(3, 5):
-        if not (text[i] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[i] in dict_char_to_int.keys()):
+        if text[i] not in VALID_NUMBERS:
             return False
 
     # Last 1 can be a number (Car) OR a letter (Motorcycle)
-    last_char_valid_number = text[5] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[5] in dict_char_to_int.keys()
-    last_char_valid_letter = text[5] in string.ascii_uppercase or text[5] in dict_int_to_char.keys()
-
-    if last_char_valid_number or last_char_valid_letter:
-        return True
-    else:
+    if text[5] not in VALID_NUMBERS and text[5] not in VALID_LETTERS:
         return False
+
+    return True
 
 
 def format_license(text):
@@ -119,43 +119,32 @@ def format_license(text):
     Returns:
         str: Formatted license plate text.
     """
-    license_plate_ = ''
-
     # Decide if motorcycle based on the last character OCR result
     is_motorcycle = False
     # If the last character is explicitly a letter (not a number in disguise based on our mapping and not a literal digit)
     # we lean towards it being a motorcycle plate format: AAA12A
-    if text[5] in string.ascii_uppercase and text[5] not in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']:
+    if text[5] in string.ascii_uppercase and text[5] not in '0123456789':
         is_motorcycle = True
     # OR if it's uniquely mapped to a letter going backwards
-    elif text[5] in dict_int_to_char.keys() and text[5] not in dict_char_to_int.keys():
+    elif text[5] in dict_int_to_char and text[5] not in dict_char_to_int:
         # If it's a '0' trying to be an 'O', dict_int_to_char has '0':'O'
          is_motorcycle = True
 
+    # ⚡ Bolt: Construct list instead of iterative string concatenation (+=)
+    # and use dict.get(key, key) for safe and faster fallback lookups
+    res = []
     for j, c in enumerate(text):
         if j < 3: # Always letters
-            if c in dict_int_to_char:
-                license_plate_ += dict_int_to_char[c]
-            else:
-                license_plate_ += c
+            res.append(dict_int_to_char.get(c, c))
         elif j < 5: # Always numbers
-            if c in dict_char_to_int:
-                license_plate_ += dict_char_to_int[c]
-            else:
-                license_plate_ += c
+            res.append(dict_char_to_int.get(c, c))
         else: # Last char: letter if Moto, number if Car
             if is_motorcycle:
-                if c in dict_int_to_char:
-                    license_plate_ += dict_int_to_char[c]
-                else:
-                    license_plate_ += c
+                res.append(dict_int_to_char.get(c, c))
             else:
-                if c in dict_char_to_int:
-                    license_plate_ += dict_char_to_int[c]
-                else:
-                    license_plate_ += c
+                res.append(dict_char_to_int.get(c, c))
 
-    return license_plate_
+    return "".join(res)
 
 
 # UNUSED: read_license_plate removed in favor of vision/plate_reader.py
