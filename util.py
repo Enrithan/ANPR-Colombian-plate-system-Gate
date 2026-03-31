@@ -18,7 +18,9 @@ dict_int_to_char = {'0': 'O',
                     '6': 'G',
                     '5': 'S'}
 
-
+# Pre-computed sets for O(1) character lookups
+VALID_LETTERS = frozenset(string.ascii_uppercase).union(dict_int_to_char.keys())
+VALID_NUMBERS = frozenset("0123456789").union(dict_char_to_int.keys())
 
 
 def write_csv(results: dict, output_path: str):
@@ -88,24 +90,17 @@ def license_complies_format(text):
     if len(text) != 6:
         return False
 
-    # First 3 are ALWAYS letters
-    for i in range(3):
-        if not (text[i] in string.ascii_uppercase or text[i] in dict_int_to_char.keys()):
-            return False
+    # ⚡ Bolt: Fast path rejection using O(1) set lookups instead of list/loop logic.
+    # Check numbers first as they are slightly faster to invalidate wrong plate formats
+    if text[3] not in VALID_NUMBERS or text[4] not in VALID_NUMBERS:
+        return False
 
-    # Next 2 are ALWAYS numbers
-    for i in range(3, 5):
-        if not (text[i] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[i] in dict_char_to_int.keys()):
-            return False
+    # First 3 are ALWAYS letters
+    if text[0] not in VALID_LETTERS or text[1] not in VALID_LETTERS or text[2] not in VALID_LETTERS:
+        return False
 
     # Last 1 can be a number (Car) OR a letter (Motorcycle)
-    last_char_valid_number = text[5] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[5] in dict_char_to_int.keys()
-    last_char_valid_letter = text[5] in string.ascii_uppercase or text[5] in dict_int_to_char.keys()
-
-    if last_char_valid_number or last_char_valid_letter:
-        return True
-    else:
-        return False
+    return text[5] in VALID_NUMBERS or text[5] in VALID_LETTERS
 
 
 def format_license(text):
