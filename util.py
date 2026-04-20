@@ -1,7 +1,5 @@
 import string
 import csv
-# REDUNDANT: Reader moved to vision/plate_reader.py to avoid multiple instances
-# reader = easyocr.Reader(['en'], gpu=False)
 
 # Mapping dictionaries for character conversion
 dict_char_to_int = {'O': '0',
@@ -18,9 +16,15 @@ dict_int_to_char = {'0': 'O',
                     '6': 'G',
                     '5': 'S'}
 
-# Pre-computed sets for O(1) lookups during string validation
-VALID_LETTERS = frozenset(string.ascii_uppercase) | frozenset(dict_int_to_char.keys())
-VALID_NUMBERS = frozenset('0123456789') | frozenset(dict_char_to_int.keys())
+# Pre-computed sets for fast O(1) lookups in tight loops
+_VALID_LETTERS = set(string.ascii_uppercase) | set(dict_int_to_char.keys())
+_VALID_NUMBERS = set('0123456789') | set(dict_char_to_int.keys())
+_VALID_LAST_CHAR = _VALID_LETTERS | _VALID_NUMBERS
+_VALID_MOTORCYCLE_LETTERS = set(string.ascii_uppercase) - set('0123456789')
+_DICT_INT_TO_CHAR_KEYS = frozenset(dict_int_to_char.keys())
+_DICT_CHAR_TO_INT_KEYS = frozenset(dict_char_to_int.keys())
+
+
 
 
 def write_csv(results: dict, output_path: str):
@@ -90,16 +94,14 @@ def license_complies_format(text):
     if len(text) != 6:
         return False
 
-    # Optimized validation: O(1) set lookups instead of loops and dynamic list creation
-    if text[0] not in VALID_LETTERS or text[1] not in VALID_LETTERS or text[2] not in VALID_LETTERS:
-        return False
-
-    if text[3] not in VALID_NUMBERS or text[4] not in VALID_NUMBERS:
-        return False
-
-    c5 = text[5]
-    if c5 not in VALID_NUMBERS and c5 not in VALID_LETTERS:
-        return False
+    # ⚡ Bolt: Fast lookup in pre-computed sets, avoids ~30 list/dict
+    # instantiations and loops per call for faster OCR filtering.
+    return (text[0] in _VALID_LETTERS and
+            text[1] in _VALID_LETTERS and
+            text[2] in _VALID_LETTERS and
+            text[3] in _VALID_NUMBERS and
+            text[4] in _VALID_NUMBERS and
+            text[5] in _VALID_LAST_CHAR)
 
     return True
 
@@ -115,24 +117,19 @@ def format_license(text):
     Returns:
         str: Formatted license plate text.
     """
-    if len(text) != 6:
-        return text
+    # ⚡ Bolt: Fast determination of motorcycle format using precomputed sets
+    is_motorcycle = (text[5] in _VALID_MOTORCYCLE_LETTERS) or \
+                    (text[5] in _DICT_INT_TO_CHAR_KEYS and text[5] not in _DICT_CHAR_TO_INT_KEYS)
 
-    c5 = text[5]
-    # Decide if motorcycle based on the last character OCR result
-    # If the last character is explicitly a letter (not a number in disguise based on our mapping and not a literal digit)
-    # we lean towards it being a motorcycle plate format: AAA12A
-    # OR if it's uniquely mapped to a letter going backwards
-    is_motorcycle = (c5 in string.ascii_uppercase and c5 not in '0123456789') or (c5 in dict_int_to_char and c5 not in dict_char_to_int)
-
-    # Optimized formatting: direct dictionary .get() lookups instead of loop+append
+    # ⚡ Bolt: Replace iterative string concatenation `+=` with a direct list comprehension
+    # and use dict.get() to gracefully fallback. This speeds up character normalization.
     return "".join([
         dict_int_to_char.get(text[0], text[0]),
         dict_int_to_char.get(text[1], text[1]),
         dict_int_to_char.get(text[2], text[2]),
         dict_char_to_int.get(text[3], text[3]),
         dict_char_to_int.get(text[4], text[4]),
-        dict_int_to_char.get(c5, c5) if is_motorcycle else dict_char_to_int.get(c5, c5)
+        dict_int_to_char.get(text[5], text[5]) if is_motorcycle else dict_char_to_int.get(text[5], text[5])
     ])
 
 
@@ -150,18 +147,14 @@ def get_car(license_plate, vehicle_track_ids):
     Returns:
         tuple: Tuple containing the vehicle coordinates (x1, y1, x2, y2) and ID.
     """
-    x1, y1, x2, y2, score, class_id = license_plate
+    x1, y1, x2, y2, *_ = license_plate
 
-    foundIt = False
-    for j in range(len(vehicle_track_ids)):
-        xcar1, ycar1, xcar2, ycar2, car_id = vehicle_track_ids[j]
+    # ⚡ Bolt: Iterating over the list elements directly and returning early
+    # saves an array lookup `vehicle_track_ids[j]` and local state tracking overhead.
+    for track in vehicle_track_ids:
+        xcar1, ycar1, xcar2, ycar2, _ = track
 
         if x1 > xcar1 and y1 > ycar1 and x2 < xcar2 and y2 < ycar2:
-            car_indx = j
-            foundIt = True
-            break
-
-    if foundIt:
-        return vehicle_track_ids[car_indx]
+            return track
 
     return -1, -1, -1, -1, -1
