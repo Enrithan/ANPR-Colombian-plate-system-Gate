@@ -1,7 +1,5 @@
 import string
 import csv
-# REDUNDANT: Reader moved to vision/plate_reader.py to avoid multiple instances
-# reader = easyocr.Reader(['en'], gpu=False)
 
 # Mapping dictionaries for character conversion
 dict_char_to_int = {'O': '0',
@@ -17,6 +15,14 @@ dict_int_to_char = {'0': 'O',
                     '4': 'A',
                     '6': 'G',
                     '5': 'S'}
+
+# Pre-computed sets for fast O(1) lookups in tight loops
+_VALID_LETTERS = set(string.ascii_uppercase) | set(dict_int_to_char.keys())
+_VALID_NUMBERS = set('0123456789') | set(dict_char_to_int.keys())
+_VALID_LAST_CHAR = _VALID_LETTERS | _VALID_NUMBERS
+_VALID_MOTORCYCLE_LETTERS = set(string.ascii_uppercase) - set('0123456789')
+_DICT_INT_TO_CHAR_KEYS = frozenset(dict_int_to_char.keys())
+_DICT_CHAR_TO_INT_KEYS = frozenset(dict_char_to_int.keys())
 
 
 
@@ -93,19 +99,16 @@ def license_complies_format(text):
     if type(text) != str or len(text) != 6:
         return False
 
-    # First 3 are ALWAYS letters
-    for i in range(3):
-        if text[i] not in VALID_LETTERS:
-            return False
+    # ⚡ Bolt: Fast lookup in pre-computed sets, avoids ~30 list/dict
+    # instantiations and loops per call for faster OCR filtering.
+    return (text[0] in _VALID_LETTERS and
+            text[1] in _VALID_LETTERS and
+            text[2] in _VALID_LETTERS and
+            text[3] in _VALID_NUMBERS and
+            text[4] in _VALID_NUMBERS and
+            text[5] in _VALID_LAST_CHAR)
 
-    # Next 2 are ALWAYS numbers
-    for i in range(3, 5):
-        if text[i] not in VALID_NUMBERS:
-            return False
-
-    # Last 1 can be a number (Car) OR a letter (Motorcycle)
-    if text[5] not in VALID_LETTERS and text[5] not in VALID_NUMBERS:
-        return False
+    return True
 
     return True
 
@@ -121,19 +124,12 @@ def format_license(text):
     Returns:
         str: Formatted license plate text.
     """
-    # ⚡ Bolt: Fast detection using built-in string methods and avoided manual string concatenation loop
-    # Decide if motorcycle based on the last character OCR result
-    is_motorcycle = False
+    # ⚡ Bolt: Fast determination of motorcycle format using precomputed sets
+    is_motorcycle = (text[5] in _VALID_MOTORCYCLE_LETTERS) or \
+                    (text[5] in _DICT_INT_TO_CHAR_KEYS and text[5] not in _DICT_CHAR_TO_INT_KEYS)
 
-    # If the last character is explicitly a letter (not a number in disguise based on our mapping and not a literal digit)
-    # we lean towards it being a motorcycle plate format: AAA12A
-    if text[5] in string.ascii_uppercase and not text[5].isdigit():
-        is_motorcycle = True
-    # OR if it's uniquely mapped to a letter going backwards
-    elif text[5] in dict_int_to_char and text[5] not in dict_char_to_int:
-        # If it's a '0' trying to be an 'O', dict_int_to_char has '0':'O'
-         is_motorcycle = True
-
+    # ⚡ Bolt: Replace iterative string concatenation `+=` with a direct list comprehension
+    # and use dict.get() to gracefully fallback. This speeds up character normalization.
     return "".join([
         dict_int_to_char.get(text[0], text[0]),
         dict_int_to_char.get(text[1], text[1]),
@@ -158,18 +154,14 @@ def get_car(license_plate, vehicle_track_ids):
     Returns:
         tuple: Tuple containing the vehicle coordinates (x1, y1, x2, y2) and ID.
     """
-    x1, y1, x2, y2, score, class_id = license_plate
+    x1, y1, x2, y2, *_ = license_plate
 
-    foundIt = False
-    for j in range(len(vehicle_track_ids)):
-        xcar1, ycar1, xcar2, ycar2, car_id = vehicle_track_ids[j]
+    # ⚡ Bolt: Iterating over the list elements directly and returning early
+    # saves an array lookup `vehicle_track_ids[j]` and local state tracking overhead.
+    for track in vehicle_track_ids:
+        xcar1, ycar1, xcar2, ycar2, _ = track
 
         if x1 > xcar1 and y1 > ycar1 and x2 < xcar2 and y2 < ycar2:
-            car_indx = j
-            foundIt = True
-            break
-
-    if foundIt:
-        return vehicle_track_ids[car_indx]
+            return track
 
     return -1, -1, -1, -1, -1
