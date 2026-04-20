@@ -90,11 +90,9 @@ def test_license_complies_format_invalid_characters():
     assert license_complies_format("ABC 12") is False  # Space
 
 def test_license_complies_format_non_string():
-    # The function currently doesn't check for type, so it will raise TypeError on slicing if not string/sequence
-    with pytest.raises(TypeError):
-        license_complies_format(None)
-    with pytest.raises(TypeError):
-        license_complies_format(123456)
+    # The function now safely returns False for non-string types
+    assert license_complies_format(None) is False
+    assert license_complies_format(123456) is False
 
 
 def test_get_car_found():

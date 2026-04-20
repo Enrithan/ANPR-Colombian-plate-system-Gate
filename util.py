@@ -79,6 +79,10 @@ def write_csv(results: dict, output_path: str):
                 writer.writerow(row)
 
 
+# Pre-computed sets for O(1) lookups in tight loops
+VALID_LETTERS = frozenset(string.ascii_uppercase + "".join(dict_int_to_char.keys()))
+VALID_NUMBERS = frozenset("0123456789" + "".join(dict_char_to_int.keys()))
+
 def license_complies_format(text):
     """
     Check if the license plate text complies with the required format.
@@ -91,7 +95,8 @@ def license_complies_format(text):
     Returns:
         bool: True if the license plate complies with the format, False otherwise.
     """
-    if len(text) != 6:
+    # ⚡ Bolt: Fast fail and O(1) set lookups instead of list/string iteration
+    if type(text) != str or len(text) != 6:
         return False
 
     # ⚡ Bolt: Fast lookup in pre-computed sets, avoids ~30 list/dict
@@ -102,6 +107,8 @@ def license_complies_format(text):
             text[3] in _VALID_NUMBERS and
             text[4] in _VALID_NUMBERS and
             text[5] in _VALID_LAST_CHAR)
+
+    return True
 
     return True
 
