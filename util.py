@@ -114,6 +114,8 @@ def license_complies_format(text):
 
     return True
 
+    return True
+
 
 def format_license(text):
     """
