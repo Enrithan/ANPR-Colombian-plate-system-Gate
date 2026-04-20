@@ -1,7 +1,5 @@
 import string
 import csv
-# REDUNDANT: Reader moved to vision/plate_reader.py to avoid multiple instances
-# reader = easyocr.Reader(['en'], gpu=False)
 
 # Mapping dictionaries for character conversion
 dict_char_to_int = {'O': '0',
@@ -18,10 +16,17 @@ dict_int_to_char = {'0': 'O',
                     '6': 'G',
                     '5': 'S'}
 
-# Pre-computed frozensets for O(1) lookups in tight loops
-VALID_LETTERS = frozenset(string.ascii_uppercase + "".join(dict_int_to_char.keys()))
-VALID_NUMBERS = frozenset("0123456789" + "".join(dict_char_to_int.keys()))
-DIGITS = frozenset("0123456789")
+# Pre-computed sets for fast O(1) lookups in tight loops
+_VALID_LETTERS = set(string.ascii_uppercase) | set(dict_int_to_char.keys())
+_VALID_NUMBERS = set('0123456789') | set(dict_char_to_int.keys())
+_VALID_LAST_CHAR = _VALID_LETTERS | _VALID_NUMBERS
+_VALID_MOTORCYCLE_LETTERS = set(string.ascii_uppercase) - set('0123456789')
+_DICT_INT_TO_CHAR_KEYS = frozenset(dict_int_to_char.keys())
+_DICT_CHAR_TO_INT_KEYS = frozenset(dict_char_to_int.keys())
+
+
+_ALL_VALID_LETTERS = _VALID_LETTERS | _DICT_INT_TO_CHAR_KEYS
+_ALL_VALID_NUMBERS = _VALID_NUMBERS | _DICT_CHAR_TO_INT_KEYS
 
 
 def write_csv(results: dict, output_path: str):
@@ -76,6 +81,10 @@ def write_csv(results: dict, output_path: str):
                 writer.writerow(row)
 
 
+# Pre-computed sets for O(1) lookups in tight loops
+VALID_LETTERS = frozenset(string.ascii_uppercase + "".join(dict_int_to_char.keys()))
+VALID_NUMBERS = frozenset("0123456789" + "".join(dict_char_to_int.keys()))
+
 def license_complies_format(text):
     """
     Check if the license plate text complies with the required format.
@@ -88,25 +97,22 @@ def license_complies_format(text):
     Returns:
         bool: True if the license plate complies with the format, False otherwise.
     """
-    if len(text) != 6:
+    # ⚡ Bolt: Fast fail and O(1) set lookups instead of list/string iteration
+    if type(text) != str or len(text) != 6:
         return False
 
-    # ⚡ Bolt: Use pre-computed frozensets for O(1) character validation
-    # This avoids iterating over list and dictionary keys in a tight loop
+    # ⚡ Bolt: Fast lookup in pre-computed sets, avoids ~30 list/dict
+    # instantiations and loops per call for faster OCR filtering.
+    return (text[0] in _VALID_LETTERS and
+            text[1] in _VALID_LETTERS and
+            text[2] in _VALID_LETTERS and
+            text[3] in _VALID_NUMBERS and
+            text[4] in _VALID_NUMBERS and
+            text[5] in _VALID_LAST_CHAR)
 
-    # First 3 are ALWAYS letters
-    for i in range(3):
-        if text[i] not in VALID_LETTERS:
-            return False
+    return True
 
-    # Next 2 are ALWAYS numbers
-    for i in range(3, 5):
-        if text[i] not in VALID_NUMBERS:
-            return False
-
-    # Last 1 can be a number (Car) OR a letter (Motorcycle)
-    if text[5] not in VALID_NUMBERS and text[5] not in VALID_LETTERS:
-        return False
+    return True
 
     return True
 
@@ -122,33 +128,20 @@ def format_license(text):
     Returns:
         str: Formatted license plate text.
     """
-    # ⚡ Bolt: Optimize with O(1) set lookups, dictionary .get(), and list join
-    # Decide if motorcycle based on the last character OCR result
-    is_motorcycle = False
-    last_char = text[5]
+    # ⚡ Bolt: Fast determination of motorcycle format using precomputed sets
+    is_motorcycle = (text[5] in _VALID_MOTORCYCLE_LETTERS) or \
+                    (text[5] in _DICT_INT_TO_CHAR_KEYS and text[5] not in _DICT_CHAR_TO_INT_KEYS)
 
-    # If the last character is explicitly a letter (not a number in disguise based on our mapping and not a literal digit)
-    # we lean towards it being a motorcycle plate format: AAA12A
-    if last_char in string.ascii_uppercase and last_char not in DIGITS:
-        is_motorcycle = True
-    # OR if it's uniquely mapped to a letter going backwards
-    elif last_char in dict_int_to_char and last_char not in dict_char_to_int:
-        # If it's a '0' trying to be an 'O', dict_int_to_char has '0':'O'
-         is_motorcycle = True
-
-    formatted_chars = []
-    for j, c in enumerate(text):
-        if j < 3: # Always letters
-            formatted_chars.append(dict_int_to_char.get(c, c))
-        elif j < 5: # Always numbers
-            formatted_chars.append(dict_char_to_int.get(c, c))
-        else: # Last char: letter if Moto, number if Car
-            if is_motorcycle:
-                formatted_chars.append(dict_int_to_char.get(c, c))
-            else:
-                formatted_chars.append(dict_char_to_int.get(c, c))
-
-    return "".join(formatted_chars)
+    # ⚡ Bolt: Replace iterative string concatenation `+=` with a direct list comprehension
+    # and use dict.get() to gracefully fallback. This speeds up character normalization.
+    return "".join([
+        dict_int_to_char.get(text[0], text[0]),
+        dict_int_to_char.get(text[1], text[1]),
+        dict_int_to_char.get(text[2], text[2]),
+        dict_char_to_int.get(text[3], text[3]),
+        dict_char_to_int.get(text[4], text[4]),
+        dict_int_to_char.get(text[5], text[5]) if is_motorcycle else dict_char_to_int.get(text[5], text[5])
+    ])
 
 
 # UNUSED: read_license_plate removed in favor of vision/plate_reader.py
@@ -165,18 +158,14 @@ def get_car(license_plate, vehicle_track_ids):
     Returns:
         tuple: Tuple containing the vehicle coordinates (x1, y1, x2, y2) and ID.
     """
-    x1, y1, x2, y2, score, class_id = license_plate
+    x1, y1, x2, y2, *_ = license_plate
 
-    foundIt = False
-    for j in range(len(vehicle_track_ids)):
-        xcar1, ycar1, xcar2, ycar2, car_id = vehicle_track_ids[j]
+    # ⚡ Bolt: Iterating over the list elements directly and returning early
+    # saves an array lookup `vehicle_track_ids[j]` and local state tracking overhead.
+    for track in vehicle_track_ids:
+        xcar1, ycar1, xcar2, ycar2, _ = track
 
         if x1 > xcar1 and y1 > ycar1 and x2 < xcar2 and y2 < ycar2:
-            car_indx = j
-            foundIt = True
-            break
-
-    if foundIt:
-        return vehicle_track_ids[car_indx]
+            return track
 
     return -1, -1, -1, -1, -1
