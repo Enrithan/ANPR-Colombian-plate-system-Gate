@@ -25,6 +25,8 @@ _DICT_INT_TO_CHAR_KEYS = frozenset(dict_int_to_char.keys())
 _DICT_CHAR_TO_INT_KEYS = frozenset(dict_char_to_int.keys())
 
 
+_ALL_VALID_LETTERS = _VALID_LETTERS | _DICT_INT_TO_CHAR_KEYS
+_ALL_VALID_NUMBERS = _VALID_NUMBERS | _DICT_CHAR_TO_INT_KEYS
 
 
 def write_csv(results: dict, output_path: str):
