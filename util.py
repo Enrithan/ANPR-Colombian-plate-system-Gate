@@ -103,6 +103,8 @@ def license_complies_format(text):
             text[4] in _VALID_NUMBERS and
             text[5] in _VALID_LAST_CHAR)
 
+    return True
+
 
 def format_license(text):
     """
