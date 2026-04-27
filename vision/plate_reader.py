@@ -16,6 +16,7 @@ class EasyOCRPlateReader(IPlateReader):
         self.reader = _reader
         # Pre-compute allowlist for performance
         self.allowlist = string.ascii_uppercase + string.digits
+        self.cleanup_table = str.maketrans('', '', ' -._|')
 
     def correct_perspective(self, img):
         """Finds the 4 corners of the plate and warps it to a clean rectangle."""
@@ -70,7 +71,6 @@ class EasyOCRPlateReader(IPlateReader):
             [0, 160 - 1]], dtype="float32")
 
         M = cv2.getPerspectiveTransform(rect, dst)
-        warped = cv2.warpPerspective(gray, M, (320, 160))
         
         # Optimize: Warp the single-channel grayscale image instead of the 3-channel BGR image
         # This speeds up the affine transformation and saves memory bandwidth
@@ -108,9 +108,7 @@ class EasyOCRPlateReader(IPlateReader):
         for detection in detections:
             bbox, text, score = detection
             # Normalize text format
-            text = text.upper()
-            for char in [' ', '-', '.', '_', '|']:
-                text = text.replace(char, '')
+            text = text.upper().translate(self.cleanup_table)
             
             if license_complies_format(text):
                 return format_license(text), score
@@ -129,7 +127,7 @@ class EasyOCRPlateReader(IPlateReader):
         detections = self.reader.readtext(gray, allowlist=self.allowlist)
         for detection in detections:
             bbox, text, score = detection
-            text = text.upper().replace(' ', '').replace('-', '')
+            text = text.upper().translate(self.cleanup_table)
             if license_complies_format(text):
                 return format_license(text), score
         return "", 0.0
