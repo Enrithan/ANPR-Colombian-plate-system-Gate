@@ -16,6 +16,8 @@ class EasyOCRPlateReader(IPlateReader):
         self.reader = _reader
         # Pre-compute allowlist for performance
         self.allowlist = string.ascii_uppercase + string.digits
+        # ⚡ Bolt: Pre-compute translation table for O(1) character removal during OCR post-processing
+        self.cleanup_table = str.maketrans('', '', ' -._|')
 
     def correct_perspective(self, img):
         """Finds the 4 corners of the plate and warps it to a clean rectangle."""
@@ -108,9 +110,8 @@ class EasyOCRPlateReader(IPlateReader):
         for detection in detections:
             bbox, text, score = detection
             # Normalize text format
-            text = text.upper()
-            for char in [' ', '-', '.', '_', '|']:
-                text = text.replace(char, '')
+            # ⚡ Bolt: Fast string translation instead of loop instantiation and multiple replaces
+            text = text.upper().translate(self.cleanup_table)
             
             if license_complies_format(text):
                 return format_license(text), score
@@ -129,7 +130,8 @@ class EasyOCRPlateReader(IPlateReader):
         detections = self.reader.readtext(gray, allowlist=self.allowlist)
         for detection in detections:
             bbox, text, score = detection
-            text = text.upper().replace(' ', '').replace('-', '')
+            # ⚡ Bolt: Fast string translation instead of chained replaces
+            text = text.upper().translate(self.cleanup_table)
             if license_complies_format(text):
                 return format_license(text), score
         return "", 0.0
