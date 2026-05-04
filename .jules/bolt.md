@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2025-05-24 - Pre-compute Translation Tables for Multiple Replacements
+**Learning:** For multiple character removals (e.g., cleaning OCR text with `replace(' ', '').replace('-', '')...`), using a pre-computed translation table `str.maketrans` and `text.translate(table)` is measurably faster than iterating loops over `.replace()` or chaining them, reducing object creation and iteration overhead in tight loops.
+**Action:** Replace iterative or chained string cleaning logic with pre-computed `str.maketrans()` / `str.translate()` stored at the class or module level for high-frequency methods.

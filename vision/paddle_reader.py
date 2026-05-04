@@ -16,6 +16,8 @@ class PaddleOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _paddle_reader
         print("[AI] PaddleOCR Plate Reader (Edge Mobile v4) initialized.")
+        # ⚡ Bolt: Pre-compute translation table for fast character cleanup
+        self.cleanup_table = str.maketrans('', '', ' -._|')
 
     def correct_perspective(self, img):
         """Finds the 4 corners of the plate and warps it to a clean rectangle."""
@@ -94,7 +96,7 @@ class PaddleOCRPlateReader(IPlateReader):
                     try: text, score = str(res[0]), float(res[1])
                     except: text, score = str(res), 1.0
 
-                text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
+                text = text.upper().translate(self.cleanup_table)
                 print(f"[OCR Raw] Extracted: '{text}' (Conf: {score:.2f})")
                 if license_complies_format(text):
                     return format_license(text), score
@@ -117,7 +119,7 @@ class PaddleOCRPlateReader(IPlateReader):
                     try: text, score = str(res[0]), float(res[1])
                     except: text, score = str(res), 1.0
 
-                text = text.upper().replace(' ', '').replace('-', '')
+                text = text.upper().translate(self.cleanup_table)
                 print(f"[OCR Raw] Extracted (fallback): '{text}' (Conf: {score:.2f})")
                 if license_complies_format(text):
                     return format_license(text), score
