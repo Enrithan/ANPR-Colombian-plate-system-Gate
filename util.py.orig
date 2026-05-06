@@ -103,12 +103,12 @@ def license_complies_format(text):
 
     # ⚡ Bolt: Fast lookup in pre-computed sets, avoids ~30 list/dict
     # instantiations and loops per call for faster OCR filtering.
-    return (text[0] in VALID_LETTERS and
-            text[1] in VALID_LETTERS and
-            text[2] in VALID_LETTERS and
-            text[3] in VALID_NUMBERS and
-            text[4] in VALID_NUMBERS and
-            (text[5] in VALID_LETTERS or text[5] in VALID_NUMBERS))
+    return (text[0] in _VALID_LETTERS and
+            text[1] in _VALID_LETTERS and
+            text[2] in _VALID_LETTERS and
+            text[3] in _VALID_NUMBERS and
+            text[4] in _VALID_NUMBERS and
+            text[5] in _VALID_LAST_CHAR)
 
     return True
 

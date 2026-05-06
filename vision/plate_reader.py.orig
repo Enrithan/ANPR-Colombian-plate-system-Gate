@@ -21,7 +21,7 @@ class EasyOCRPlateReader(IPlateReader):
         """Finds the 4 corners of the plate and warps it to a clean rectangle."""
         # 1. Image preparation
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
+
         # Poka-yoke: If image is too small, unwarping might fail. Skip for very small crops.
         if gray.shape[0] < 20 or gray.shape[1] < 40:
             return img
@@ -33,7 +33,7 @@ class EasyOCRPlateReader(IPlateReader):
         # 2. Find the largest rectangular-ish contour
         contours, _ = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         contours = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
-        
+
         screen_cnt = None
         for c in contours:
             peri = cv2.arcLength(c, True)
@@ -44,18 +44,18 @@ class EasyOCRPlateReader(IPlateReader):
                 if cv2.contourArea(c) > 500:
                     screen_cnt = approx
                     break
-        
+
         if screen_cnt is None:
             return img # Return original if no valid 4-point polygon found
 
         # 3. Order the points properly
         pts = screen_cnt.reshape(4, 2)
         rect = np.zeros((4, 2), dtype="float32")
-        
+
         s = pts.sum(axis=1)
         rect[0] = pts[np.argmin(s)] # Top-left
         rect[2] = pts[np.argmax(s)] # Bottom-right
-        
+
         diff = np.diff(pts, axis=1)
         rect[1] = pts[np.argmin(diff)] # Top-right
         rect[3] = pts[np.argmax(diff)] # Bottom-left
@@ -71,7 +71,7 @@ class EasyOCRPlateReader(IPlateReader):
 
         M = cv2.getPerspectiveTransform(rect, dst)
         warped = cv2.warpPerspective(gray, M, (320, 160))
-        
+
         # Optimize: Warp the single-channel grayscale image instead of the 3-channel BGR image
         # This speeds up the affine transformation and saves memory bandwidth
         warped_gray = cv2.warpPerspective(gray, M, (320, 160))
@@ -82,17 +82,17 @@ class EasyOCRPlateReader(IPlateReader):
         # 1. Perspective Correction attempt
         # ⚡ Bolt: correct_perspective now returns a single-channel grayscale image
         gray_processed_plate = self.correct_perspective(cropped_plate)
-        
+
         # 2. Enhancing contrast (Crucial for white taxi plates which can be overexposed)
         if len(gray_processed_plate.shape) == 3:
             gray = cv2.cvtColor(gray_processed_plate, cv2.COLOR_BGR2GRAY)
         else:
             gray = gray_processed_plate
-        
+
         # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
         contrast_enhanced = clahe.apply(gray)
-        
+
         # Sharpening kernel to make characters crisp
         kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
         sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
@@ -108,8 +108,10 @@ class EasyOCRPlateReader(IPlateReader):
         for detection in detections:
             bbox, text, score = detection
             # Normalize text format
-            # ⚡ Bolt: Fast chained replace is ~20% faster than loop and ~4x faster than str.translate for short strings
-            text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
+            text = text.upper()
+            for char in [' ', '-', '.', '_', '|']:
+                text = text.replace(char, '')
+
             if license_complies_format(text):
                 return format_license(text), score
 
