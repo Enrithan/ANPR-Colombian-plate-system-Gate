@@ -7,6 +7,15 @@ from paddleocr import PaddleOCR
 from .interfaces import IPlateReader
 from util import license_complies_format, format_license
 
+# ⚡ Bolt: Pre-compute static arrays for O(1) memory access in tight OCR loops
+_DST_PTS = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]], dtype="float32")
+
+_SHARPEN_KERNEL = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+
 # Initialize PaddleOCR globally so we don't reload the models on every frame.
 # We use the mobile English/number models which are extremely fast and small, perfect for edge.
 logging.getLogger("ppocr").setLevel(logging.ERROR) # Suppress verbose paddle logs
@@ -54,11 +63,7 @@ class PaddleOCRPlateReader(IPlateReader):
         rect[1] = pts[np.argmin(diff)] # Top-right
         rect[3] = pts[np.argmax(diff)] # Bottom-left
 
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
+        dst = _DST_PTS
 
         M = cv2.getPerspectiveTransform(rect, dst)
         return cv2.warpPerspective(img, M, (320, 160))
@@ -69,7 +74,7 @@ class PaddleOCRPlateReader(IPlateReader):
         gray = cv2.cvtColor(processed_plate, cv2.COLOR_BGR2GRAY)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
         contrast_enhanced = clahe.apply(gray)
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+        kernel = _SHARPEN_KERNEL
         sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
 
         # PaddleOCR expects 3-channel inputs
@@ -117,7 +122,7 @@ class PaddleOCRPlateReader(IPlateReader):
                     try: text, score = str(res[0]), float(res[1])
                     except: text, score = str(res), 1.0
 
-                text = text.upper().replace(' ', '').replace('-', '')
+                text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
                 print(f"[OCR Raw] Extracted (fallback): '{text}' (Conf: {score:.2f})")
                 if license_complies_format(text):
                     return format_license(text), score

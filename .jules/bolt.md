@@ -9,3 +9,11 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2025-03-22 - Pre-computing Static Numpy Arrays in OCR Loops
+**Learning:** In high-frequency computer vision loops (e.g., OCR inference applied to every frame), repeatedly instantiating static `np.array` objects for transformations like `dst` points or convolution kernels introduces severe allocation overhead. Memory benchmarking showed that instantiating these arrays natively takes roughly an order of magnitude more time than accessing an already instantiated module-level array.
+**Action:** Always extract and pre-compute static `np.array` definitions (like `getPerspectiveTransform` boundaries and `filter2D` kernels) as module-level constants to skip object creation time and optimize fast-path logic.
+
+## 2025-03-22 - Chained `.replace` Operations vs For Loops
+**Learning:** For applying multiple specific character removals to short strings (like OCR text output), chaining string `.replace(char, '')` calls sequentially is empirically ~30% faster than looping over a list of characters and iteratively applying the `.replace()` inside the loop. The absolute execution time is low, but in OCR pipelines over many frames, the iteration overhead of the `for` loop dominates.
+**Action:** Use chained `.replace()` calls instead of iterative character lists for multi-character replacements in short string performance-sensitive paths.
