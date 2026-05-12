@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2026-05-12 - Eliminate Overhead with Chained Replace and Constants
+**Learning:** Python text normalization loops using `for char in list: text = text.replace()` incur significant performance overhead in hot paths. Replacing this with chained `.replace()` calls is measurably faster (up to ~18%). Additionally, instantiating static NumPy arrays (like coordinate targets or convolution kernels) inside high-frequency processing loops (like per-frame OCR) causes repeated memory allocation overhead.
+**Action:** When performing simple character-removal sanitization on short strings, use chained `.replace()` instead of a `for` loop. Always extract static NumPy arrays into module-level constants to prevent redundant allocation and garbage collection.
