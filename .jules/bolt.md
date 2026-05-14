@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2024-05-26 - Eliminate Array Allocations in High-Frequency Loops
+**Learning:** Instantiating static data structures like NumPy arrays for image transformations (`cv2.getPerspectiveTransform`) or convolutions (`cv2.filter2D`) inside high-frequency processing loops (like `correct_perspective` or `read_text` called per frame) introduces severe memory allocation overhead.
+**Action:** Always pre-compute and cache read-only arrays as module-level constants to avoid unnecessary memory allocations and object creation.
