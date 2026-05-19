@@ -7,6 +7,20 @@ from paddleocr import PaddleOCR
 from .interfaces import IPlateReader
 from util import license_complies_format, format_license
 
+# ⚡ Bolt: Pre-compute static arrays for high-frequency loops
+_DST_PTS = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]
+], dtype="float32")
+
+_SHARPEN_KERNEL = np.array([
+    [0, -1, 0],
+    [-1, 5, -1],
+    [0, -1, 0]
+])
+
 # Initialize PaddleOCR globally so we don't reload the models on every frame.
 # We use the mobile English/number models which are extremely fast and small, perfect for edge.
 logging.getLogger("ppocr").setLevel(logging.ERROR) # Suppress verbose paddle logs
@@ -54,13 +68,7 @@ class PaddleOCRPlateReader(IPlateReader):
         rect[1] = pts[np.argmin(diff)] # Top-right
         rect[3] = pts[np.argmax(diff)] # Bottom-left
 
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
+        M = cv2.getPerspectiveTransform(rect, _DST_PTS)
         return cv2.warpPerspective(img, M, (320, 160))
 
     def read_text(self, cropped_plate: np.ndarray) -> tuple[str, float]:
@@ -69,8 +77,7 @@ class PaddleOCRPlateReader(IPlateReader):
         gray = cv2.cvtColor(processed_plate, cv2.COLOR_BGR2GRAY)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
         contrast_enhanced = clahe.apply(gray)
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _SHARPEN_KERNEL)
 
         # PaddleOCR expects 3-channel inputs
         sharpened_3c = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
