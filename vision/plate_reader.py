@@ -11,6 +11,16 @@ _gpu_available = torch.cuda.is_available()
 print(f"Vision Module: Initializing EasyOCR (GPU={_gpu_available})")
 _reader = easyocr.Reader(['en'], gpu=_gpu_available)
 
+# ⚡ Bolt: Cache static NumPy arrays used in transformations
+# Avoids allocation overhead on every frame during high-frequency operations.
+_DST = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]], dtype="float32")
+
+_KERNEL = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+
 class EasyOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _reader
@@ -63,13 +73,7 @@ class EasyOCRPlateReader(IPlateReader):
         # 4. Perspective warp
         # ⚡ Bolt: Convert to grayscale BEFORE warping to avoid 3-channel interpolation
         # This speeds up the warp by 3x and avoids a subsequent color conversion
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
+        M = cv2.getPerspectiveTransform(rect, _DST)
         warped = cv2.warpPerspective(gray, M, (320, 160))
         
         # Optimize: Warp the single-channel grayscale image instead of the 3-channel BGR image
@@ -94,8 +98,7 @@ class EasyOCRPlateReader(IPlateReader):
         contrast_enhanced = clahe.apply(gray)
         
         # Sharpening kernel to make characters crisp
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _KERNEL)
 
         # 3. Strategy: Try OCR on Sharpened Gray first
         detections = self.reader.readtext(sharpened, allowlist=self.allowlist)
