@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2025-05-28 - Avoid CPU-GPU transfer overhead loops when parsing YOLO results
+**Learning:** Accessing bounding box properties (like `.xyxy[0]` or `.conf[0]`) on individual bounding boxes while iterating over a YOLO `results.boxes` object causes repeated synchronous data transfers between the GPU and CPU. In tests, this looping approach can be ~30-40x slower than vectorizing the extraction.
+**Action:** Extract all bounding box data simultaneously using `results.boxes.data.cpu().numpy()` and iterate over the resultant NumPy array. This pulls everything from the GPU to the CPU in one operation, avoiding the massive overhead of per-property transfers inside the iteration loop.
