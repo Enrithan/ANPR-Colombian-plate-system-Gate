@@ -25,9 +25,10 @@ for pos in sample_positions:
     if boxes is None or len(boxes) == 0:
         print("  → No detections at all (even at 1% confidence)")
     else:
-        for box in boxes:
-            conf = float(box.conf[0])
-            cls = int(box.cls[0])
+        data = boxes.data.cpu().numpy()
+        for row in data:
+            conf = float(row[4])
+            cls = int(row[5])
             print(f"  → Class {cls}, Confidence {conf:.3f}")
     print()
 
