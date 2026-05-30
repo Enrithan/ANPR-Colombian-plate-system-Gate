@@ -28,12 +28,11 @@ class YOLOVehicleDetector(IVehicleDetector):
         results = self.model(frame, imgsz=640, verbose=False)[0]
         detections = []
         if results.boxes:
-            for box in results.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
-                if cls in self.vehicle_classes:
-                    detections.append([x1, y1, x2, y2, conf])
+            boxes_data = results.boxes.data.cpu().numpy()
+            for row in boxes_data:
+                x1, y1, x2, y2, conf, cls = row
+                if int(cls) in self.vehicle_classes:
+                    detections.append([x1, y1, x2, y2, float(conf)])
         return detections
 
 class SORTVehicleTracker(IVehicleTracker):
