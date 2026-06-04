@@ -13,9 +13,9 @@ import torch
 class YOLOVehicleDetector(IVehicleDetector):
     def __init__(self, model_path: str, vehicle_classes: list = None):
         if vehicle_classes is None:
-            self.vehicle_classes = [2, 3, 5, 7]
+            self.vehicle_classes = {2, 3, 5, 7} # O(1) membership lookup
         else:
-            self.vehicle_classes = vehicle_classes
+            self.vehicle_classes = set(vehicle_classes)
             
         # Auto-detect device (Use CUDA if available)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -27,13 +27,13 @@ class YOLOVehicleDetector(IVehicleDetector):
         # YOLOv10 performs NMS internally (End-to-End)
         results = self.model(frame, imgsz=640, verbose=False)[0]
         detections = []
-        if results.boxes:
-            for box in results.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
+        if results.boxes and len(results.boxes.data) > 0:
+            # Extract all bounding box data at once to avoid repeated synchronous GPU-CPU data transfers
+            data = results.boxes.data.cpu().numpy()
+            for row in data:
+                cls = int(row[5])
                 if cls in self.vehicle_classes:
-                    detections.append([x1, y1, x2, y2, conf])
+                    detections.append([row[0], row[1], row[2], row[3], row[4]])
         return detections
 
 class SORTVehicleTracker(IVehicleTracker):
