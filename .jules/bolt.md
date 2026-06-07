@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2025-03-24 - Vectorize PyTorch Tensor Operations
+**Learning:** Looping over `results.boxes` in PyTorch-based models (like YOLOv8/v10) and extracting values individually (e.g., `box.xyxy[0].tolist()`) forces repeated implicit, synchronous GPU-CPU data transfers for every element, which creates a massive CPU bottleneck during inference.
+**Action:** Extract all bounding box data at once using vectorized tensor operations like `results.boxes.data.cpu().numpy()` and process the resulting NumPy array. Also use Python sets (O(1)) instead of lists (O(n)) for frequently accessed membership checks like class IDs.
