@@ -13,9 +13,10 @@ import torch
 class YOLOVehicleDetector(IVehicleDetector):
     def __init__(self, model_path: str, vehicle_classes: list = None):
         if vehicle_classes is None:
-            self.vehicle_classes = [2, 3, 5, 7]
+            # ⚡ Bolt: Use a set for O(1) membership lookups instead of a list
+            self.vehicle_classes = {2, 3, 5, 7}
         else:
-            self.vehicle_classes = vehicle_classes
+            self.vehicle_classes = set(vehicle_classes)
             
         # Auto-detect device (Use CUDA if available)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -26,15 +27,17 @@ class YOLOVehicleDetector(IVehicleDetector):
     def detect(self, frame: np.ndarray) -> list:
         # YOLOv10 performs NMS internally (End-to-End)
         results = self.model(frame, imgsz=640, verbose=False)[0]
-        detections = []
-        if results.boxes:
-            for box in results.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
-                if cls in self.vehicle_classes:
-                    detections.append([x1, y1, x2, y2, conf])
-        return detections
+        if not results.boxes:
+            return []
+
+        # ⚡ Bolt: Extract all bounding box data in one vectorized tensor operation.
+        # Iterating over results.boxes and accessing properties causes repeated synchronous
+        # GPU-CPU data transfers, which is an enormous bottleneck.
+        boxes_data = results.boxes.data.cpu().numpy()
+
+        # ⚡ Bolt: Fast list comprehension filtering using the pre-computed set
+        return [[row[0], row[1], row[2], row[3], float(row[4])]
+                for row in boxes_data if int(row[5]) in self.vehicle_classes]
 
 class SORTVehicleTracker(IVehicleTracker):
     def __init__(self):
