@@ -13,9 +13,10 @@ import torch
 class YOLOVehicleDetector(IVehicleDetector):
     def __init__(self, model_path: str, vehicle_classes: list = None):
         if vehicle_classes is None:
-            self.vehicle_classes = [2, 3, 5, 7]
+            # ⚡ Bolt: Use set for O(1) lookups during detection filtering
+            self.vehicle_classes = {2, 3, 5, 7}
         else:
-            self.vehicle_classes = vehicle_classes
+            self.vehicle_classes = set(vehicle_classes)
             
         # Auto-detect device (Use CUDA if available)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -28,12 +29,13 @@ class YOLOVehicleDetector(IVehicleDetector):
         results = self.model(frame, imgsz=640, verbose=False)[0]
         detections = []
         if results.boxes:
-            for box in results.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
+            # ⚡ Bolt: Extract all bounding box data at once using vectorized tensor
+            # operations to avoid repeated synchronous GPU-CPU data transfers in the loop
+            data = results.boxes.data.cpu().numpy()
+            for i in range(data.shape[0]):
+                cls = int(data[i, 5])
                 if cls in self.vehicle_classes:
-                    detections.append([x1, y1, x2, y2, conf])
+                    detections.append([float(data[i, 0]), float(data[i, 1]), float(data[i, 2]), float(data[i, 3]), float(data[i, 4])])
         return detections
 
 class SORTVehicleTracker(IVehicleTracker):
