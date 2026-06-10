@@ -110,10 +110,12 @@ def extract_and_label(video_path, model_path, output_dir, conf_threshold, sample
                 h, w = frame.shape[:2]
                 label_lines = []
                 
-                for box in boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].tolist()
-                    conf = float(box.conf[0])
-                    cls = int(box.cls[0])
+                # ⚡ Bolt: Extract all data at once to avoid sync GPU-CPU transfers in a loop
+                boxes_data = boxes.data.cpu().numpy()
+                for row in boxes_data:
+                    # ⚡ Bolt: ensure types are correctly preserved as standard python types
+                    x1, y1, x2, y2, conf, cls = map(float, row)
+                    cls = int(cls)
                     
                     # Normalize to YOLO format (cx, cy, bw, bh) in [0..1]
                     cx = (x1 + x2) / 2 / w
