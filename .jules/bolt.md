@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2024-06-12 - Vectorized extraction and Python sets in Ultralytics object loops
+**Learning:** Looping over `results.boxes` in `ultralytics` and accessing `.xyxy`, `.conf`, or `.cls` triggers individual synchronous GPU-CPU tensor transfers and allocations, severely bottlenecking inference loops (e.g. 0.360s vs 0.008s in a 100x iteration test). Iterating over a Python `list` for class matching inside that loop further slows execution.
+**Action:** Extract all bounding box data simultaneously using `boxes.data.cpu().numpy()` and convert membership filter lists to `set` for O(1) lookup to prevent pipeline stalls.
