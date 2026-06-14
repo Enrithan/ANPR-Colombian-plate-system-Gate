@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2025-03-24 - PyTorch/Ultralytics GPU-CPU Sync Bottleneck in YOLO Loops
+**Learning:** Extracting tensor values iteratively from `results.boxes` (e.g., `box.xyxy[0]`, `box.conf[0]`) forces repeated synchronous GPU-to-CPU data transfers per bounding box, causing massive CPU stalls in the detection loop. Vectorizing the extraction via `results.boxes.data.cpu().numpy()` pulls all data over the PCIe bus in a single batch, drastically reducing overhead.
+**Action:** Never iterate over individual PyTorch tensor elements to extract scalar values. Always extract the entire batch of predictions as a NumPy array first, then iterate over the array in Python. Additionally, explicitly cast the numpy values (like `np.float32`) back to native Python types (`float()`, `int()`) when inserting into lists to avoid downstream serialization bugs (e.g., with `json.dumps()`).
