@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2025-03-22 - Precompute OpenCV Transform Data Structures
+**Learning:** In high-frequency computer vision loops (e.g., OCR inference on each frame), instantiating static NumPy arrays for perspective transform coordinates or convolution kernels inside functions introduces unnecessary allocation overhead. OpenCV functions like `cv2.getPerspectiveTransform` and `cv2.filter2D` only read from these arrays and do not mutate them.
+**Action:** Always pre-compute and cache static NumPy arrays used for geometrical transformations or filtering as module-level constants to optimize performance.
