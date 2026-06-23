@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2024-06-23 - Cache static OpenCV objects and Numpy arrays in OCR pipeline
+**Learning:** Instantiating static OpenCV objects (like `cv2.createCLAHE`) and Numpy arrays (like convolution kernels or perspective destination coordinates) inside high-frequency execution pathways (e.g., OCR inference loops) introduces measurable memory allocation and initialization overhead.
+**Action:** Pre-compute and cache these objects and arrays as module-level constants to avoid reallocation inside tight loops. Also, when optimizing transformation functions to return single-channel (grayscale) images instead of 3-channel (BGR), verify that all early-return fallback paths are updated to return the grayscale variable to prevent inconsistent channel shapes and downstream regressions.
