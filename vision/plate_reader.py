@@ -11,6 +11,15 @@ _gpu_available = torch.cuda.is_available()
 print(f"Vision Module: Initializing EasyOCR (GPU={_gpu_available})")
 _reader = easyocr.Reader(['en'], gpu=_gpu_available)
 
+# ⚡ Bolt: Cache static objects and arrays used in tight OCR loops to avoid reallocation overhead
+_CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+_SHARPEN_KERNEL = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+_DST_PTS = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]], dtype="float32")
+
 class EasyOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _reader
@@ -24,7 +33,7 @@ class EasyOCRPlateReader(IPlateReader):
         
         # Poka-yoke: If image is too small, unwarping might fail. Skip for very small crops.
         if gray.shape[0] < 20 or gray.shape[1] < 40:
-            return img
+            return gray
 
         # Multi-stage edge detection to find the plate contour
         blur = cv2.GaussianBlur(gray, (3, 3), 0)
@@ -46,7 +55,7 @@ class EasyOCRPlateReader(IPlateReader):
                     break
         
         if screen_cnt is None:
-            return img # Return original if no valid 4-point polygon found
+            return gray # Return original (as grayscale) if no valid 4-point polygon found
 
         # 3. Order the points properly
         pts = screen_cnt.reshape(4, 2)
@@ -63,14 +72,7 @@ class EasyOCRPlateReader(IPlateReader):
         # 4. Perspective warp
         # ⚡ Bolt: Convert to grayscale BEFORE warping to avoid 3-channel interpolation
         # This speeds up the warp by 3x and avoids a subsequent color conversion
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
-        warped = cv2.warpPerspective(gray, M, (320, 160))
+        M = cv2.getPerspectiveTransform(rect, _DST_PTS)
         
         # Optimize: Warp the single-channel grayscale image instead of the 3-channel BGR image
         # This speeds up the affine transformation and saves memory bandwidth
@@ -90,12 +92,10 @@ class EasyOCRPlateReader(IPlateReader):
             gray = gray_processed_plate
         
         # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        contrast_enhanced = clahe.apply(gray)
+        contrast_enhanced = _CLAHE.apply(gray)
         
         # Sharpening kernel to make characters crisp
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _SHARPEN_KERNEL)
 
         # 3. Strategy: Try OCR on Sharpened Gray first
         detections = self.reader.readtext(sharpened, allowlist=self.allowlist)
