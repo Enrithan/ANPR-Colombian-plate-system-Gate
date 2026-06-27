@@ -12,6 +12,15 @@ from util import license_complies_format, format_license
 logging.getLogger("ppocr").setLevel(logging.ERROR) # Suppress verbose paddle logs
 _paddle_reader = PaddleOCR(use_angle_cls=False, lang='en', enable_mkldnn=False)
 
+# Pre-compute static arrays and OpenCV objects for performance
+_DST_PTS = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]], dtype="float32")
+_SHARPEN_KERNEL = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+_CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+
 class PaddleOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _paddle_reader
@@ -54,23 +63,15 @@ class PaddleOCRPlateReader(IPlateReader):
         rect[1] = pts[np.argmin(diff)] # Top-right
         rect[3] = pts[np.argmax(diff)] # Bottom-left
 
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
+        M = cv2.getPerspectiveTransform(rect, _DST_PTS)
         return cv2.warpPerspective(img, M, (320, 160))
 
     def read_text(self, cropped_plate: np.ndarray) -> tuple[str, float]:
         processed_plate = self.correct_perspective(cropped_plate)
         
         gray = cv2.cvtColor(processed_plate, cv2.COLOR_BGR2GRAY)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        contrast_enhanced = clahe.apply(gray)
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        contrast_enhanced = _CLAHE.apply(gray)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _SHARPEN_KERNEL)
 
         # PaddleOCR expects 3-channel inputs
         sharpened_3c = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
