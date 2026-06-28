@@ -6,10 +6,20 @@ import torch
 from .interfaces import IPlateReader
 from util import license_complies_format, format_license
 
+
 # Initialize THE reader once with GPU support if available
 _gpu_available = torch.cuda.is_available()
 print(f"Vision Module: Initializing EasyOCR (GPU={_gpu_available})")
 _reader = easyocr.Reader(['en'], gpu=_gpu_available)
+
+# Pre-compute static objects for OCR performance
+_CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+_SHARPEN_KERNEL = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+_DST_PERSPECTIVE = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]], dtype="float32")
 
 class EasyOCRPlateReader(IPlateReader):
     def __init__(self):
@@ -50,7 +60,7 @@ class EasyOCRPlateReader(IPlateReader):
 
         # 3. Order the points properly
         pts = screen_cnt.reshape(4, 2)
-        rect = np.zeros((4, 2), dtype="float32")
+        rect = np.empty((4, 2), dtype="float32")
         
         s = pts.sum(axis=1)
         rect[0] = pts[np.argmin(s)] # Top-left
@@ -63,13 +73,8 @@ class EasyOCRPlateReader(IPlateReader):
         # 4. Perspective warp
         # ⚡ Bolt: Convert to grayscale BEFORE warping to avoid 3-channel interpolation
         # This speeds up the warp by 3x and avoids a subsequent color conversion
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
+        # ⚡ Bolt: Re-use precomputed destination array to prevent allocation overhead
+        M = cv2.getPerspectiveTransform(rect, _DST_PERSPECTIVE)
         warped = cv2.warpPerspective(gray, M, (320, 160))
         
         # Optimize: Warp the single-channel grayscale image instead of the 3-channel BGR image
@@ -90,12 +95,11 @@ class EasyOCRPlateReader(IPlateReader):
             gray = gray_processed_plate
         
         # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        contrast_enhanced = clahe.apply(gray)
+        # ⚡ Bolt: Use precomputed CLAHE and Kernel to prevent allocation overhead per frame
+        contrast_enhanced = _CLAHE.apply(gray)
         
         # Sharpening kernel to make characters crisp
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _SHARPEN_KERNEL)
 
         # 3. Strategy: Try OCR on Sharpened Gray first
         detections = self.reader.readtext(sharpened, allowlist=self.allowlist)
@@ -108,9 +112,8 @@ class EasyOCRPlateReader(IPlateReader):
         for detection in detections:
             bbox, text, score = detection
             # Normalize text format
-            text = text.upper()
-            for char in [' ', '-', '.', '_', '|']:
-                text = text.replace(char, '')
+            # ⚡ Bolt: Fast normalization using chained replace
+            text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
             
             if license_complies_format(text):
                 return format_license(text), score
@@ -129,7 +132,8 @@ class EasyOCRPlateReader(IPlateReader):
         detections = self.reader.readtext(gray, allowlist=self.allowlist)
         for detection in detections:
             bbox, text, score = detection
-            text = text.upper().replace(' ', '').replace('-', '')
+            # ⚡ Bolt: Fast normalization using chained replace
+            text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
             if license_complies_format(text):
                 return format_license(text), score
         return "", 0.0
