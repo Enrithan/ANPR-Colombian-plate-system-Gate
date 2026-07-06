@@ -24,7 +24,7 @@ class EasyOCRPlateReader(IPlateReader):
         
         # Poka-yoke: If image is too small, unwarping might fail. Skip for very small crops.
         if gray.shape[0] < 20 or gray.shape[1] < 40:
-            return img
+            return gray
 
         # Multi-stage edge detection to find the plate contour
         blur = cv2.GaussianBlur(gray, (3, 3), 0)
@@ -46,7 +46,7 @@ class EasyOCRPlateReader(IPlateReader):
                     break
         
         if screen_cnt is None:
-            return img # Return original if no valid 4-point polygon found
+            return gray # Return grayscale if no valid 4-point polygon found
 
         # 3. Order the points properly
         pts = screen_cnt.reshape(4, 2)
@@ -108,9 +108,7 @@ class EasyOCRPlateReader(IPlateReader):
         for detection in detections:
             bbox, text, score = detection
             # Normalize text format
-            text = text.upper()
-            for char in [' ', '-', '.', '_', '|']:
-                text = text.replace(char, '')
+            text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
             
             if license_complies_format(text):
                 return format_license(text), score
