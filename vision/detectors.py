@@ -13,9 +13,9 @@ import torch
 class YOLOVehicleDetector(IVehicleDetector):
     def __init__(self, model_path: str, vehicle_classes: list = None):
         if vehicle_classes is None:
-            self.vehicle_classes = [2, 3, 5, 7]
+            self.vehicle_classes = {2, 3, 5, 7}  # ⚡ Bolt: Use a set for O(1) membership lookups
         else:
-            self.vehicle_classes = vehicle_classes
+            self.vehicle_classes = set(vehicle_classes)  # ⚡ Bolt: Convert list to set
             
         # Auto-detect device (Use CUDA if available)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -27,12 +27,17 @@ class YOLOVehicleDetector(IVehicleDetector):
         # YOLOv10 performs NMS internally (End-to-End)
         results = self.model(frame, imgsz=640, verbose=False)[0]
         detections = []
+
+        # ⚡ Bolt: Extract all bounding boxes via vectorized CPU transfer at once to avoid repeated
+        # synchronous GPU-CPU sync overhead inside the loop.
         if results.boxes:
-            for box in results.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
+            boxes_data = results.boxes.data.cpu().numpy()
+            for row in boxes_data:
+                # row format is typically [x1, y1, x2, y2, conf, cls] for YOLOv8/v10
+                cls = int(row[5])
                 if cls in self.vehicle_classes:
+                    x1, y1, x2, y2 = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+                    conf = float(row[4])
                     detections.append([x1, y1, x2, y2, conf])
         return detections
 
