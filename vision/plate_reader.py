@@ -6,6 +6,15 @@ import torch
 from .interfaces import IPlateReader
 from util import license_complies_format, format_license
 
+# ⚡ Bolt: Cache static arrays to prevent reallocation on every frame
+_DST_PTS = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]
+], dtype="float32")
+_SHARPEN_KERNEL = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+
 # Initialize THE reader once with GPU support if available
 _gpu_available = torch.cuda.is_available()
 print(f"Vision Module: Initializing EasyOCR (GPU={_gpu_available})")
@@ -50,7 +59,8 @@ class EasyOCRPlateReader(IPlateReader):
 
         # 3. Order the points properly
         pts = screen_cnt.reshape(4, 2)
-        rect = np.zeros((4, 2), dtype="float32")
+        # ⚡ Bolt: Use np.empty instead of np.zeros since we immediately overwrite all values
+        rect = np.empty((4, 2), dtype="float32")
         
         s = pts.sum(axis=1)
         rect[0] = pts[np.argmin(s)] # Top-left
@@ -63,13 +73,7 @@ class EasyOCRPlateReader(IPlateReader):
         # 4. Perspective warp
         # ⚡ Bolt: Convert to grayscale BEFORE warping to avoid 3-channel interpolation
         # This speeds up the warp by 3x and avoids a subsequent color conversion
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
+        M = cv2.getPerspectiveTransform(rect, _DST_PTS)
         warped = cv2.warpPerspective(gray, M, (320, 160))
         
         # Optimize: Warp the single-channel grayscale image instead of the 3-channel BGR image
@@ -94,8 +98,7 @@ class EasyOCRPlateReader(IPlateReader):
         contrast_enhanced = clahe.apply(gray)
         
         # Sharpening kernel to make characters crisp
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _SHARPEN_KERNEL)
 
         # 3. Strategy: Try OCR on Sharpened Gray first
         detections = self.reader.readtext(sharpened, allowlist=self.allowlist)
@@ -108,9 +111,8 @@ class EasyOCRPlateReader(IPlateReader):
         for detection in detections:
             bbox, text, score = detection
             # Normalize text format
-            text = text.upper()
-            for char in [' ', '-', '.', '_', '|']:
-                text = text.replace(char, '')
+            # ⚡ Bolt: Chained replace is faster than loop for short strings
+            text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
             
             if license_complies_format(text):
                 return format_license(text), score
