@@ -11,6 +11,20 @@ _gpu_available = torch.cuda.is_available()
 print(f"Vision Module: Initializing EasyOCR (GPU={_gpu_available})")
 _reader = easyocr.Reader(['en'], gpu=_gpu_available)
 
+# ⚡ Bolt: Cache static arrays to prevent allocation in high-frequency inference loops
+_DST_PTS = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]
+], dtype="float32")
+
+_SHARPEN_KERNEL = np.array([
+    [0, -1, 0],
+    [-1, 5, -1],
+    [0, -1, 0]
+])
+
 class EasyOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _reader
@@ -46,11 +60,14 @@ class EasyOCRPlateReader(IPlateReader):
                     break
         
         if screen_cnt is None:
-            return img # Return original if no valid 4-point polygon found
+            # ⚡ Bolt: Always return grayscale to avoid redundant downstream cvtColor checks
+            return gray # Return grayscale if no valid 4-point polygon found
 
         # 3. Order the points properly
         pts = screen_cnt.reshape(4, 2)
-        rect = np.zeros((4, 2), dtype="float32")
+
+        # ⚡ Bolt: Use np.empty instead of np.zeros since array is immediately populated
+        rect = np.empty((4, 2), dtype="float32")
         
         s = pts.sum(axis=1)
         rect[0] = pts[np.argmin(s)] # Top-left
@@ -63,39 +80,26 @@ class EasyOCRPlateReader(IPlateReader):
         # 4. Perspective warp
         # ⚡ Bolt: Convert to grayscale BEFORE warping to avoid 3-channel interpolation
         # This speeds up the warp by 3x and avoids a subsequent color conversion
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
-        warped = cv2.warpPerspective(gray, M, (320, 160))
+        M = cv2.getPerspectiveTransform(rect, _DST_PTS)
         
         # Optimize: Warp the single-channel grayscale image instead of the 3-channel BGR image
         # This speeds up the affine transformation and saves memory bandwidth
-        warped_gray = cv2.warpPerspective(gray, M, (320, 160))
+        warped = cv2.warpPerspective(gray, M, (320, 160))
 
-        return warped_gray
+        return warped
 
     def read_text(self, cropped_plate: np.ndarray) -> tuple[str, float]:
         # 1. Perspective Correction attempt
         # ⚡ Bolt: correct_perspective now returns a single-channel grayscale image
-        gray_processed_plate = self.correct_perspective(cropped_plate)
+        gray = self.correct_perspective(cropped_plate)
         
         # 2. Enhancing contrast (Crucial for white taxi plates which can be overexposed)
-        if len(gray_processed_plate.shape) == 3:
-            gray = cv2.cvtColor(gray_processed_plate, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = gray_processed_plate
-        
         # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
         contrast_enhanced = clahe.apply(gray)
         
         # Sharpening kernel to make characters crisp
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _SHARPEN_KERNEL)
 
         # 3. Strategy: Try OCR on Sharpened Gray first
         detections = self.reader.readtext(sharpened, allowlist=self.allowlist)
@@ -108,16 +112,15 @@ class EasyOCRPlateReader(IPlateReader):
         for detection in detections:
             bbox, text, score = detection
             # Normalize text format
-            text = text.upper()
-            for char in [' ', '-', '.', '_', '|']:
-                text = text.replace(char, '')
+            # ⚡ Bolt: Chained replace is faster than loop
+            text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
             
             if license_complies_format(text):
                 return format_license(text), score
 
         # 5. Final Fallback: If unwarping failed we might have a better shot with the raw crop
         # (Recursive-ish call but limited to 1 level)
-        if gray_processed_plate.shape[:2] != cropped_plate.shape[:2]:
+        if gray.shape[:2] != cropped_plate.shape[:2]:
              # Just one attempt on raw if unwarped failed to return text
              return self.read_text_single_pass(cropped_plate)
 
