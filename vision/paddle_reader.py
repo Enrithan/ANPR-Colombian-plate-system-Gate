@@ -12,6 +12,21 @@ from util import license_complies_format, format_license
 logging.getLogger("ppocr").setLevel(logging.ERROR) # Suppress verbose paddle logs
 _paddle_reader = PaddleOCR(use_angle_cls=False, lang='en', enable_mkldnn=False)
 
+# ⚡ Bolt: Cache static arrays to prevent allocation in high-frequency inference loops
+_DST_PTS = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]
+], dtype="float32")
+
+_SHARPEN_KERNEL = np.array([
+    [0, -1, 0],
+    [-1, 5, -1],
+    [0, -1, 0]
+])
+
+
 class PaddleOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _paddle_reader
@@ -41,10 +56,13 @@ class PaddleOCRPlateReader(IPlateReader):
                     break
         
         if screen_cnt is None:
-            return img 
+            # ⚡ Bolt: Always return grayscale to avoid redundant downstream cvtColor checks
+            return gray
 
         pts = screen_cnt.reshape(4, 2)
-        rect = np.zeros((4, 2), dtype="float32")
+
+        # ⚡ Bolt: Use np.empty instead of np.zeros since array is immediately populated
+        rect = np.empty((4, 2), dtype="float32")
         
         s = pts.sum(axis=1)
         rect[0] = pts[np.argmin(s)] # Top-left
@@ -54,23 +72,18 @@ class PaddleOCRPlateReader(IPlateReader):
         rect[1] = pts[np.argmin(diff)] # Top-right
         rect[3] = pts[np.argmax(diff)] # Bottom-left
 
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
+        M = cv2.getPerspectiveTransform(rect, _DST_PTS)
 
-        M = cv2.getPerspectiveTransform(rect, dst)
-        return cv2.warpPerspective(img, M, (320, 160))
+        # ⚡ Bolt: Warp the single-channel grayscale image instead of 3-channel BGR
+        return cv2.warpPerspective(gray, M, (320, 160))
 
     def read_text(self, cropped_plate: np.ndarray) -> tuple[str, float]:
-        processed_plate = self.correct_perspective(cropped_plate)
+        # ⚡ Bolt: correct_perspective now guaranteed to return single-channel grayscale
+        gray = self.correct_perspective(cropped_plate)
         
-        gray = cv2.cvtColor(processed_plate, cv2.COLOR_BGR2GRAY)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
         contrast_enhanced = clahe.apply(gray)
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _SHARPEN_KERNEL)
 
         # PaddleOCR expects 3-channel inputs
         sharpened_3c = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
