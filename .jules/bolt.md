@@ -9,3 +9,7 @@
 ## 2025-03-21 - Precomputing Data Structures & Regular Expressions
 **Learning:** Initializing variables, casting datatypes (lists/dicts), parsing `string` constants and iterating inside `for` loops within very fast execution pathways (like plate validation per frame) has an enormous cumulative performance cost (0.22s to 0.04s or 4x difference). Pre-compiling one combined regex (`|`) is similarly 4x faster than looping over a list of independent compiled expressions.
 **Action:** Move instantiation of objects, lists, sets, and constants out of tight loops. Use module-level variables with O(1) set-lookups and combine regular expressions where possible to skip Python iteration overhead.
+
+## 2025-05-18 - Optimize YOLO detection processing
+**Learning:** Accessing bounding box properties (e.g., `box.xyxy[0]`) individually inside a loop when processing YOLO detection results causes repeated synchronous GPU-CPU data transfers, significantly degrading performance in high-frequency computer vision loops. Furthermore, storing classes for membership checks in a `list` requires O(n) lookup time.
+**Action:** Extract all bounding box data at once using vectorized tensor operations (like `results.boxes.data.cpu().numpy()`) prior to looping. Cast the extracted numpy values back to native Python types (e.g., using `float()` and `int()`) to ensure type consistency downstream. Ensure class membership checks (like `vehicle_classes`) utilize Python `set`s for O(1) lookup times.
