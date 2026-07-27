@@ -66,7 +66,7 @@ else:
             
         # The ultimate text box always remains visible!
         correct_label = st.text_input("Final Plate to Approve:", value=default_text)
-        correct_label = correct_label.strip().upper().replace(" ", "").replace("-", "")
+        correct_label = correct_label.strip().upper().replace(" ", "").replace("-", "").replace(".", "").replace("/", "").replace("\\", "")
         
         # --- AI QUICK SUGGESTION BUTTONS ---
         if known_plates and ai_guess != "UNKNOWN":
