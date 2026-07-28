@@ -17,3 +17,7 @@
 ## 2024-05-26 - Fast O(1) Class Index Lookups in Hot Paths
 **Learning:** Searching an integer list `[2, 3, 5, 7]` via the `in` operator per frame scales at O(N) cost and wastes significant overhead inside inference loops.
 **Action:** Use a python `set()` initialization (e.g. `{2, 3, 5, 7}`) for static membership checking to gain O(1) time complexity in real-time detection logic.
+
+## 2024-05-27 - OpenCV Array Allocation in High-Frequency Inference Loops
+**Learning:** During continuous frame processing in `cv2.getPerspectiveTransform` and `cv2.filter2D`, repeatedly allocating constant mathematical matrices via `np.array` or `np.zeros` inside the loop has a severe cumulative latency cost. Additionally, `np.empty` is marginally faster than `np.zeros` for dynamically sizing temporary buffers (like `rect`) because it skips the memory-zeroing operation when the array is immediately populated.
+**Action:** Always hoist static configuration arrays (like projection `dst` points or morphological `kernels`) to module-level constants to ensure zero-cost allocation per frame. For arrays that must be allocated per frame but are immediately overwritten, prefer `np.empty` over `np.zeros` or `np.ones`.

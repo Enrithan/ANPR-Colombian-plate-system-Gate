@@ -12,6 +12,16 @@ from util import license_complies_format, format_license
 logging.getLogger("ppocr").setLevel(logging.ERROR) # Suppress verbose paddle logs
 _paddle_reader = PaddleOCR(use_angle_cls=False, lang='en', enable_mkldnn=False)
 
+# Pre-computed arrays for perspective warp and image sharpening to avoid re-allocation in loops
+_DST_PTS = np.array([
+    [0, 0],
+    [320 - 1, 0],
+    [320 - 1, 160 - 1],
+    [0, 160 - 1]], dtype="float32")
+
+_SHARPEN_KERNEL = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+
+
 class PaddleOCRPlateReader(IPlateReader):
     def __init__(self):
         self.reader = _paddle_reader
@@ -44,7 +54,7 @@ class PaddleOCRPlateReader(IPlateReader):
             return gray
 
         pts = screen_cnt.reshape(4, 2)
-        rect = np.zeros((4, 2), dtype="float32")
+        rect = np.empty((4, 2), dtype="float32")
         
         s = pts.sum(axis=1)
         rect[0] = pts[np.argmin(s)] # Top-left
@@ -54,13 +64,7 @@ class PaddleOCRPlateReader(IPlateReader):
         rect[1] = pts[np.argmin(diff)] # Top-right
         rect[3] = pts[np.argmax(diff)] # Bottom-left
 
-        dst = np.array([
-            [0, 0],
-            [320 - 1, 0],
-            [320 - 1, 160 - 1],
-            [0, 160 - 1]], dtype="float32")
-
-        M = cv2.getPerspectiveTransform(rect, dst)
+        M = cv2.getPerspectiveTransform(rect, _DST_PTS)
 
         # ⚡ Bolt: Convert to grayscale BEFORE warping to avoid 3-channel interpolation
         # This speeds up the warp by 3x and avoids a subsequent color conversion downstream
@@ -77,8 +81,7 @@ class PaddleOCRPlateReader(IPlateReader):
 
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
         contrast_enhanced = clahe.apply(gray)
-        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
-        sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+        sharpened = cv2.filter2D(contrast_enhanced, -1, _SHARPEN_KERNEL)
 
         # PaddleOCR expects 3-channel inputs
         sharpened_3c = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
