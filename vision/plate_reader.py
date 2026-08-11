@@ -108,9 +108,7 @@ class EasyOCRPlateReader(IPlateReader):
         for detection in detections:
             bbox, text, score = detection
             # Normalize text format
-            text = text.upper()
-            for char in [' ', '-', '.', '_', '|']:
-                text = text.replace(char, '')
+            text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
             
             if license_complies_format(text):
                 return format_license(text), score
@@ -129,7 +127,7 @@ class EasyOCRPlateReader(IPlateReader):
         detections = self.reader.readtext(gray, allowlist=self.allowlist)
         for detection in detections:
             bbox, text, score = detection
-            text = text.upper().replace(' ', '').replace('-', '')
+            text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
             if license_complies_format(text):
                 return format_license(text), score
         return "", 0.0

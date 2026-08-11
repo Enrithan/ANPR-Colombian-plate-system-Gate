@@ -125,7 +125,7 @@ class PaddleOCRPlateReader(IPlateReader):
                     try: text, score = str(res[0]), float(res[1])
                     except: text, score = str(res), 1.0
 
-                text = text.upper().replace(' ', '').replace('-', '')
+                text = text.upper().replace(' ', '').replace('-', '').replace('.', '').replace('_', '').replace('|', '')
                 print(f"[OCR Raw] Extracted (fallback): '{text}' (Conf: {score:.2f})")
                 if license_complies_format(text):
                     return format_license(text), score
